@@ -1,0 +1,54 @@
+avc1 没有 openh264:
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from './demo/video_00001_4X_40fps_h264.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp41isom
+    creation_time   : 2025-03-28T14:03:32.000000Z
+  Duration: 00:00:09.73, start: 0.000000, bitrate: 47238 kb/s
+  Stream #0:0[0x1](und): Video: h264 (Constrained Baseline) (avc1 / 0x31637661), yuv420p(progressive), 768x1536 [SAR 1:1 DAR 1:2], 47236 kb/s, 40 fps, 40 tbr, 40k tbn (default)
+    Metadata:
+      creation_time   : 2025-03-28T14:03:32.000000Z
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : AVC Coding
+
+avc1 有 openh264
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from './demo/video_00001_4X_40fps.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf58.76.100
+  Duration: 00:00:09.73, start: 0.000000, bitrate: 23192 kb/s
+  Stream #0:0[0x1](und): Video: h264 (Constrained Baseline) (avc1 / 0x31637661), yuv420p(progressive), 768x1536, 23189 kb/s, 40 fps, 40 tbr, 10240 tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+
+mp4v:
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'demo/video_00001_bak.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2mp41
+    encoder         : Lavf58.76.100
+  Duration: 00:00:09.73, start: 0.000000, bitrate: 10063 kb/s
+  Stream #0:0[0x1](und): Video: mpeg4 (Simple Profile) (mp4v / 0x7634706D), yuv420p, 768x1536 [SAR 1:1 DAR 1:2], 10061 kb/s, 40 fps, 40 tbr, 10240 tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+
+原始的：
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'demo/video_00001.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf61.9.107
+  Duration: 00:00:09.80, start: 0.000000, bitrate: 30899 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 768x1536, 30897 kb/s, 10 fps, 10 tbr, 10240 tbn (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc61.33.102 libx264

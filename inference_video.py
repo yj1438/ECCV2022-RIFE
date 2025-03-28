@@ -13,49 +13,9 @@ from model.pytorch_msssim import ssim_matlab
 
 warnings.filterwarnings("ignore")
 
-def transferAudio(sourceVideo, targetVideo):
-    import shutil
-    import moviepy.editor
-    tempAudioFileName = "./temp/audio.mkv"
-
-    # split audio from original video file and store in "temp" directory
-    if True:
-
-        # clear old "temp" directory if it exits
-        if os.path.isdir("temp"):
-            # remove temp directory
-            shutil.rmtree("temp")
-        # create new "temp" directory
-        os.makedirs("temp")
-        # extract audio from video
-        os.system('ffmpeg -y -i "{}" -c:a copy -vn {}'.format(sourceVideo, tempAudioFileName))
-
-    targetNoAudio = os.path.splitext(targetVideo)[0] + "_noaudio" + os.path.splitext(targetVideo)[1]
-    os.rename(targetVideo, targetNoAudio)
-    # combine audio file and new video file
-    os.system('ffmpeg -y -i "{}" -i {} -c copy "{}"'.format(targetNoAudio, tempAudioFileName, targetVideo))
-
-    if os.path.getsize(targetVideo) == 0: # if ffmpeg failed to merge the video and audio together try converting the audio to aac
-        tempAudioFileName = "./temp/audio.m4a"
-        os.system('ffmpeg -y -i "{}" -c:a aac -b:a 160k -vn {}'.format(sourceVideo, tempAudioFileName))
-        os.system('ffmpeg -y -i "{}" -i {} -c copy "{}"'.format(targetNoAudio, tempAudioFileName, targetVideo))
-        if (os.path.getsize(targetVideo) == 0): # if aac is not supported by selected format
-            os.rename(targetNoAudio, targetVideo)
-            print("Audio transfer failed. Interpolated video will have no audio")
-        else:
-            print("Lossless audio transfer failed. Audio was transcoded to AAC (M4A) instead.")
-
-            # remove audio-less video
-            os.remove(targetNoAudio)
-    else:
-        os.remove(targetNoAudio)
-
-    # remove temp directory
-    shutil.rmtree("temp")
-
 parser = argparse.ArgumentParser(description='Interpolation for a pair of images')
-parser.add_argument('--video', dest='video', type=str, default=None)
-parser.add_argument('--output', dest='output', type=str, default=None)
+parser.add_argument('--video', dest='video', type=str, default=None, help='input video file')
+parser.add_argument('--output', dest='output', type=str, default=None, help='output video file')
 parser.add_argument('--img', dest='img', type=str, default=None)
 parser.add_argument('--montage', dest='montage', action='store_true', help='montage origin video')
 parser.add_argument('--model', dest='modelDir', type=str, default='train_log', help='directory with trained model files')
@@ -63,10 +23,10 @@ parser.add_argument('--fp16', dest='fp16', action='store_true', help='fp16 mode 
 parser.add_argument('--UHD', dest='UHD', action='store_true', help='support 4k video')
 parser.add_argument('--scale', dest='scale', type=float, default=1.0, help='Try scale=0.5 for 4k video')
 parser.add_argument('--skip', dest='skip', action='store_true', help='whether to remove static frames before processing')
-parser.add_argument('--fps', dest='fps', type=int, default=None)
-parser.add_argument('--png', dest='png', action='store_true', help='whether to vid_out png format vid_outs')
-parser.add_argument('--ext', dest='ext', type=str, default='mp4', help='vid_out video extension')
-parser.add_argument('--exp', dest='exp', type=int, default=1)
+parser.add_argument('--fps', dest='fps', type=int, default=None, help='output video fps')
+parser.add_argument('--png', dest='png', action='store_true', help='whether to video_out png format vid_outs')
+parser.add_argument('--ext', dest='ext', type=str, default='mp4', help='video_out video extension')
+parser.add_argument('--exp', dest='exp', type=int, default=1, help='interpolation times')
 args = parser.parse_args()
 assert (not args.video is None or not args.img is None)
 if args.skip:
@@ -77,7 +37,11 @@ assert args.scale in [0.25, 0.5, 1.0, 2.0, 4.0]
 if not args.img is None:
     args.png = True
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+deviceType = "cuda" if torch.cuda.is_available() else "cpu"
+print("Using torch device: ", deviceType)
+
+device = torch.device(deviceType)
 torch.set_grad_enabled(False)
 if torch.cuda.is_available():
     torch.backends.cudnn.enabled = True
@@ -88,15 +52,16 @@ if torch.cuda.is_available():
 try:
     try:
         try:
-            from model.RIFE_HDv2 import Model
-            model = Model()
-            model.load_model(args.modelDir, -1)
-            print("Loaded v2.x HD model.")
-        except:
+            # https://github.com/yj1438/ECCV2022-RIFE?tab=readme-ov-file#installation
             from train_log.RIFE_HDv3 import Model
             model = Model()
             model.load_model(args.modelDir, -1)
             print("Loaded v3.x HD model.")
+        except:
+            from model.RIFE_HDv2 import Model
+            model = Model()
+            model.load_model(args.modelDir, -1)
+            print("Loaded v2.x HD model.")
     except:
         from model.RIFE_HD import Model
         model = Model()
@@ -110,6 +75,10 @@ except:
 model.eval()
 model.device()
 
+# print args
+print('Arguments:')
+print(args)
+
 if not args.video is None:
     videoCapture = cv2.VideoCapture(args.video)
     fps = videoCapture.get(cv2.CAP_PROP_FPS)
@@ -122,7 +91,22 @@ if not args.video is None:
         fpsNotAssigned = False
     videogen = skvideo.io.vreader(args.video)
     lastframe = next(videogen)
-    fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+
+    # OpenCV: FFMPEG: format mp4 / MP4 (MPEG-4 Part 14)
+    # fourcc tag 0x7634706d/'mp4v' codec_id 000C
+    # fourcc tag 0x31637661/'avc1' codec_id 001B
+    # fourcc tag 0x33637661/'avc3' codec_id 001B
+    # fourcc tag 0x31766568/'hev1' codec_id 00AD
+    # fourcc tag 0x31637668/'hvc1' codec_id 00AD
+    # fourcc tag 0x7634706d/'mp4v' codec_id 0002
+    # fourcc tag 0x7634706d/'mp4v' codec_id 0001
+    # fourcc tag 0x7634706d/'mp4v' codec_id 0007
+    # fourcc tag 0x7634706d/'mp4v' codec_id 003D
+
+    # to mpeg4
+    # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    # to h264, need openh264 installed, from https://github.com/cisco/openh264/releases
+    fourcc = cv2.VideoWriter_fourcc(*'avc1')
     video_path_wo_ext, ext = os.path.splitext(args.video)
     print('{}.{}, {} frames in total, {}FPS to {}FPS'.format(video_path_wo_ext, args.ext, tot_frame, fps, args.fps))
     if args.png == False and fpsNotAssigned == True:
@@ -139,17 +123,17 @@ else:
     lastframe = cv2.imread(os.path.join(args.img, videogen[0]), cv2.IMREAD_UNCHANGED)[:, :, ::-1].copy()
     videogen = videogen[1:]
 h, w, _ = lastframe.shape
-vid_out_name = None
-vid_out = None
+video_out_name = None
+video_out = None
 if args.png:
-    if not os.path.exists('vid_out'):
-        os.mkdir('vid_out')
+    if not os.path.exists('video_out'):
+        os.mkdir('video_out')
 else:
     if args.output is not None:
-        vid_out_name = args.output
+        video_out_name = args.output
     else:
-        vid_out_name = '{}_{}X_{}fps.{}'.format(video_path_wo_ext, (2 ** args.exp), int(np.round(args.fps)), args.ext)
-    vid_out = cv2.VideoWriter(vid_out_name, fourcc, args.fps, (w, h))
+        video_out_name = '{}_{}X_{}fps.{}'.format(video_path_wo_ext, (2 ** args.exp), int(np.round(args.fps)), args.ext)
+    video_out = cv2.VideoWriter(video_out_name, fourcc, args.fps, (w, h))
 
 def clear_write_buffer(user_args, write_buffer):
     cnt = 0
@@ -158,10 +142,10 @@ def clear_write_buffer(user_args, write_buffer):
         if item is None:
             break
         if user_args.png:
-            cv2.imwrite('vid_out/{:0>7d}.png'.format(cnt), item[:, :, ::-1])
+            cv2.imwrite('video_out/{:0>7d}.png'.format(cnt), item[:, :, ::-1])
             cnt += 1
         else:
-            vid_out.write(item[:, :, ::-1])
+            video_out.write(item[:, :, ::-1])
 
 def build_read_buffer(user_args, read_buffer, videogen):
     try:
@@ -284,14 +268,76 @@ import time
 while(not write_buffer.empty()):
     time.sleep(0.1)
 pbar.close()
-if not vid_out is None:
-    vid_out.release()
+if not video_out is None:
+    video_out.release()
+
+
+# get no auio video file name
+def getNoAudioVideoFileName(videoFileName):
+    # get file name without extension
+    videoFileNameNoExt = os.path.splitext(videoFileName)[0]
+    # get file extension
+    videoFileNameExt = os.path.splitext(videoFileName)[1]
+    # create new file name with "_noaudio" suffix
+    noAudioVideoFileName = videoFileNameNoExt + "_noaudio" + videoFileNameExt
+    return noAudioVideoFileName
+
+
+# move audio to a temp video file from original video file, then merge audio to new video file
+def transferAudio(sourceVideo, targetVideo):
+    import shutil
+    # import moviepy.editor
+
+    tempAudioFileName = "./temp/audio.mkv"
+
+    # split audio from original video file and store in "temp" directory
+    if True:
+        # clear old "temp" directory if it exits
+        if os.path.isdir("temp"):
+            # remove temp directory
+            shutil.rmtree("temp")
+        # create new "temp" directory
+        os.makedirs("temp")
+        # extract audio from video
+        print("\n")
+        print("Extracting audio from video...")
+        ffmpegCommand = 'ffmpeg -y -i "{}" -c:a copy -vn "{}"'.format(sourceVideo, tempAudioFileName)
+        print(ffmpegCommand)
+        os.system(ffmpegCommand)
+
+    # check if audio was extracted successfully
+    if os.path.getsize(tempAudioFileName) == 0:
+        print("Audio extraction failed. Interpolated video will have no audio")
+    
+    else:
+        targetNoAudio = getNoAudioVideoFileName(targetVideo)
+        os.rename(targetVideo, targetNoAudio)
+        # combine audio file and new video file
+        os.system('ffmpeg -y -i "{}" -i {} -c copy "{}"'.format(targetNoAudio, tempAudioFileName, targetVideo))
+
+        # if ffmpeg failed to merge the video and audio together try converting the audio to aac
+        if os.path.getsize(targetVideo) == 0:
+            tempAudioFileName = "./temp/audio.m4a"
+            os.system('ffmpeg -y -i "{}" -c:a aac -b:a 160k -vn {}'.format(sourceVideo, tempAudioFileName))
+            os.system('ffmpeg -y -i "{}" -i {} -c copy "{}"'.format(targetNoAudio, tempAudioFileName, targetVideo))
+            if (os.path.getsize(targetVideo) == 0): # if aac is not supported by selected format
+                os.rename(targetNoAudio, targetVideo)
+                print("Audio transfer failed. Interpolated video will have no audio")
+            else:
+                os.remove(targetNoAudio)
+                print("Lossless audio transfer failed. Audio was transcoded to AAC (M4A) instead.")   
+        else:
+            os.remove(targetNoAudio)
+
+    # remove temp directory
+    shutil.rmtree("temp")
 
 # move audio to new video file if appropriate
 if args.png == False and fpsNotAssigned == True and not args.video is None:
     try:
-        transferAudio(args.video, vid_out_name)
+        transferAudio(args.video, video_out_name)
     except:
         print("Audio transfer failed. Interpolated video will have no audio")
-        targetNoAudio = os.path.splitext(vid_out_name)[0] + "_noaudio" + os.path.splitext(vid_out_name)[1]
-        os.rename(targetNoAudio, vid_out_name)
+        targetNoAudio = getNoAudioVideoFileName(video_out_name)
+        if os.path.exists(targetNoAudio):
+            os.rename(targetNoAudio, video_out_name)
