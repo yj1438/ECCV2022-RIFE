@@ -27,6 +27,7 @@ parser.add_argument('--fps', dest='fps', type=int, default=None, help='output vi
 parser.add_argument('--png', dest='png', action='store_true', help='whether to video_out png format vid_outs')
 parser.add_argument('--ext', dest='ext', type=str, default='mp4', help='video_out video extension')
 parser.add_argument('--exp', dest='exp', type=int, default=1, help='interpolation times')
+
 args = parser.parse_args()
 assert (not args.video is None or not args.img is None)
 if args.skip:

@@ -4,13 +4,8 @@ import torch
 import argparse
 from torch.nn import functional as F
 import warnings
-warnings.filterwarnings("ignore")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-torch.set_grad_enabled(False)
-if torch.cuda.is_available():
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
+warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser(description='Interpolation for a pair of images')
 parser.add_argument('--img', dest='img', nargs=2, required=True)
@@ -22,18 +17,27 @@ parser.add_argument('--model', dest='modelDir', type=str, default='train_log', h
 
 args = parser.parse_args()
 
+deviceType = "cuda" if torch.cuda.is_available() else "cpu"
+print("Using torch device: ", deviceType)
+
+device = torch.device(deviceType)
+torch.set_grad_enabled(False)
+if torch.cuda.is_available():
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
+
 try:
     try:
         try:
-            from model.RIFE_HDv2 import Model
-            model = Model()
-            model.load_model(args.modelDir, -1)
-            print("Loaded v2.x HD model.")
-        except:
             from train_log.RIFE_HDv3 import Model
             model = Model()
             model.load_model(args.modelDir, -1)
             print("Loaded v3.x HD model.")
+        except:
+            from model.RIFE_HDv2 import Model
+            model = Model()
+            model.load_model(args.modelDir, -1)
+            print("Loaded v2.x HD model.")
     except:
         from model.RIFE_HD import Model
         model = Model()
